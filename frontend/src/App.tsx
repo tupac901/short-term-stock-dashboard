@@ -10,8 +10,18 @@ import {
   Target,
   TrendingUp,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  CandlestickSeries,
+  ColorType,
+  CrosshairMode,
+  HistogramSeries,
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+  type Time,
+} from "lightweight-charts";
 
 import { ApiClient } from "./api/client";
 import type { BacktestResult, ScoreRun, StockPool, StockScore, Strategy, StrategyTemplate } from "./types";
@@ -19,7 +29,7 @@ import type { BacktestResult, ScoreRun, StockPool, StockScore, Strategy, Strateg
 const defaultSymbols = "600519,000001,300750,002594,601318";
 
 type Candle = {
-  day: string;
+  time: Time;
   open: number;
   high: number;
   low: number;
@@ -36,80 +46,118 @@ const marketTape = [
 
 function makeCandles(score?: StockScore): Candle[] {
   const base = score?.close ?? 28;
-  const trend = score ? (score.total_score - 50) / 170 : 0.04;
-  return Array.from({ length: 36 }, (_, index) => {
-    const wave = Math.sin(index / 2.6) * base * 0.018;
+  const trend = score ? (score.total_score - 50) / 180 : 0.04;
+  const start = new Date("2026-01-02T00:00:00");
+  return Array.from({ length: 80 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const wave = Math.sin(index / 2.8) * base * 0.018;
     const drift = index * trend;
-    const open = base * (0.92 + index * 0.002) + wave + drift;
-    const close = open + Math.cos(index / 2.1) * base * 0.025 + trend * 2.4;
-    const high = Math.max(open, close) + base * (0.012 + (index % 4) * 0.004);
-    const low = Math.min(open, close) - base * (0.011 + (index % 3) * 0.004);
+    const open = base * (0.88 + index * 0.0018) + wave + drift;
+    const close = open + Math.cos(index / 2.2) * base * 0.024 + trend * 2.2;
+    const high = Math.max(open, close) + base * (0.012 + (index % 4) * 0.003);
+    const low = Math.min(open, close) - base * (0.011 + (index % 3) * 0.003);
     return {
-      day: `${index + 1}`,
+      time: date.toISOString().slice(0, 10) as Time,
       open: Number(open.toFixed(2)),
       close: Number(close.toFixed(2)),
       high: Number(high.toFixed(2)),
       low: Number(low.toFixed(2)),
-      volume: Math.round(80 + Math.abs(close - open) * 18 + (index % 7) * 18),
+      volume: Math.round(80 + Math.abs(close - open) * 20 + (index % 9) * 16),
     };
   });
 }
 
-function CandleChart({ score }: { score?: StockScore }) {
-  const candles = makeCandles(score);
-  const min = Math.min(...candles.map((item) => item.low));
-  const max = Math.max(...candles.map((item) => item.high));
-  const width = 860;
-  const height = 330;
-  const chartTop = 18;
-  const chartHeight = 220;
-  const volumeTop = 262;
-  const scaleY = (value: number) => chartTop + ((max - value) / (max - min || 1)) * chartHeight;
-  const slot = width / candles.length;
+function InteractiveKLine({ score }: { score?: StockScore }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const chart = createChart(containerRef.current, {
+      autoSize: true,
+      layout: {
+        background: { type: ColorType.Solid, color: "#07090c" },
+        textColor: "#9aa5b2",
+        fontFamily: 'Arial, "Microsoft YaHei", sans-serif',
+      },
+      grid: {
+        vertLines: { color: "#1a2028" },
+        horzLines: { color: "#1a2028" },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color: "#d6dde7", labelBackgroundColor: "#a71c1c" },
+        horzLine: { color: "#d6dde7", labelBackgroundColor: "#a71c1c" },
+      },
+      rightPriceScale: {
+        borderColor: "#2a313a",
+        scaleMargins: { top: 0.08, bottom: 0.25 },
+      },
+      timeScale: {
+        borderColor: "#2a313a",
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 5,
+        barSpacing: 9,
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
+      },
+    });
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: "#ff4d4f",
+      downColor: "#25c26e",
+      borderUpColor: "#ff4d4f",
+      borderDownColor: "#25c26e",
+      wickUpColor: "#ff8080",
+      wickDownColor: "#48d991",
+    });
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: "volume" },
+      priceScaleId: "",
+    });
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: { top: 0.78, bottom: 0 },
+    });
+    chartRef.current = chart;
+    candleSeriesRef.current = candleSeries;
+    volumeSeriesRef.current = volumeSeries;
+
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+      candleSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const candles = makeCandles(score);
+    candleSeriesRef.current?.setData(candles.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })));
+    volumeSeriesRef.current?.setData(candles.map((item) => ({
+      time: item.time,
+      value: item.volume,
+      color: item.close >= item.open ? "rgba(255, 77, 79, 0.5)" : "rgba(37, 194, 110, 0.45)",
+    })));
+    chartRef.current?.timeScale().fitContent();
+  }, [score]);
 
   return (
-    <svg className="kline-svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="K线图">
-      {Array.from({ length: 5 }, (_, index) => (
-        <line
-          key={`grid-${index}`}
-          x1="0"
-          x2={width}
-          y1={chartTop + index * 55}
-          y2={chartTop + index * 55}
-          className="chart-grid"
-        />
-      ))}
-      {candles.map((candle, index) => {
-        const x = index * slot + slot / 2;
-        const rising = candle.close >= candle.open;
-        const yOpen = scaleY(candle.open);
-        const yClose = scaleY(candle.close);
-        const bodyTop = Math.min(yOpen, yClose);
-        const bodyHeight = Math.max(3, Math.abs(yClose - yOpen));
-        return (
-          <g key={candle.day}>
-            <line x1={x} x2={x} y1={scaleY(candle.high)} y2={scaleY(candle.low)} className={rising ? "candle-up" : "candle-down"} />
-            <rect
-              x={x - slot * 0.28}
-              y={bodyTop}
-              width={slot * 0.56}
-              height={bodyHeight}
-              className={rising ? "candle-up-fill" : "candle-down-fill"}
-            />
-            <rect
-              x={x - slot * 0.3}
-              y={volumeTop + 44 - Math.min(44, candle.volume / 5)}
-              width={slot * 0.6}
-              height={Math.min(44, candle.volume / 5)}
-              className={rising ? "volume-up" : "volume-down"}
-            />
-          </g>
-        );
-      })}
-      <text x="8" y="18" className="axis-label">{max.toFixed(2)}</text>
-      <text x="8" y="238" className="axis-label">{min.toFixed(2)}</text>
-      <text x="8" y="318" className="axis-label">VOL</text>
-    </svg>
+    <div className="kline-wrap">
+      <div ref={containerRef} className="interactive-kline" />
+      <div className="kline-hint">拖动平移 · 滚轮缩放 · 十字光标查看价格</div>
+    </div>
   );
 }
 
@@ -178,7 +226,7 @@ export default function App() {
       const nextRun = await api.runScore(pool.id, strategy.current_version_id);
       setScoreRun(nextRun);
       setSelectedSymbol(nextRun.scores[0]?.symbol ?? "");
-      setMessage("短线评分完成，K线和排行榜已更新。");
+      setMessage("短线评分完成，交互K线和排行榜已更新。");
     }, "评分失败");
   }
 
@@ -201,7 +249,7 @@ export default function App() {
           <span className="brand-mark">短</span>
           <div>
             <h1>短线股票决策终端</h1>
-            <p>黑红行情盘 · K线 · 量价评分 · 风险排雷</p>
+            <p>黑红行情盘 · 交互K线 · 量价评分 · 风险排雷</p>
           </div>
         </div>
         <div className="market-tape">
@@ -268,7 +316,7 @@ export default function App() {
               <h2><CandlestickChart size={18} /> 日K线</h2>
               <div className="period-tabs"><span>日线</span><span>周线</span><span>月线</span><span>分钟</span></div>
             </div>
-            <CandleChart score={selectedScore} />
+            <InteractiveKLine score={selectedScore} />
           </div>
 
           <div className="bottom-grid">
