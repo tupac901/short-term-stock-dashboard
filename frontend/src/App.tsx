@@ -115,8 +115,8 @@ function CandleChart({ score }: { score?: StockScore }) {
 
 export default function App() {
   const api = useMemo(() => new ApiClient(), []);
-  const [email, setEmail] = useState("demo@example.com");
-  const [password, setPassword] = useState("StrongPass123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
   const [templates, setTemplates] = useState<StrategyTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState("strong_breakout");
@@ -142,6 +142,14 @@ export default function App() {
 
   async function login() {
     await runAction(async () => {
+      if (!email.trim() || !password.trim()) {
+        setMessage("请输入邮箱和密码。首次使用会自动注册。");
+        return;
+      }
+      if (password.length < 8) {
+        setMessage("密码至少需要 8 位。");
+        return;
+      }
       setMessage("正在登录...");
       await api.registerAndLogin(email, password, "短线交易员");
       const nextTemplates = await api.templates();
@@ -211,9 +219,9 @@ export default function App() {
       <section className="terminal-grid">
         <aside className="left-rail panel">
           <h2><Lock size={16} /> 账户</h2>
-          <label>邮箱<input value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-          <label>密码<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-          <button onClick={login} disabled={busy}><Lock size={16} /> 登录 / 注册</button>
+          <label>邮箱<input value={email} placeholder="输入你的邮箱" onChange={(event) => setEmail(event.target.value)} /></label>
+          <label>密码<input type="password" value={password} placeholder="至少 8 位密码" onChange={(event) => setPassword(event.target.value)} /></label>
+          <button onClick={login} disabled={busy}><Lock size={16} /> 登录 / 首次自动注册</button>
 
           <h2><Target size={16} /> 股票池</h2>
           <textarea value={symbols} onChange={(event) => setSymbols(event.target.value)} />
