@@ -7,5 +7,8 @@ describe("App", () => {
   it("renders the short-term stock dashboard shell", () => {
     render(<App />);
     expect(screen.getByText("短线股票决策终端")).toBeInTheDocument();
+    expect(screen.getByText("分时")).toBeInTheDocument();
+    expect(screen.getByText("1分钟")).toBeInTheDocument();
+    expect(screen.getByText("日K")).toBeInTheDocument();
   });
 });

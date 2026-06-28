@@ -17,16 +17,32 @@ import {
   ColorType,
   CrosshairMode,
   HistogramSeries,
+  LineSeries,
   createChart,
   type IChartApi,
   type ISeriesApi,
   type Time,
+  type UTCTimestamp,
 } from "lightweight-charts";
 
 import { ApiClient } from "./api/client";
 import type { BacktestResult, ScoreRun, StockPool, StockScore, Strategy, StrategyTemplate } from "./types";
 
 const defaultSymbols = "600519,000001,300750,002594,601318";
+
+const periods = [
+  { key: "timeline", label: "分时", count: 120, stepMinutes: 1, barSpacing: 6 },
+  { key: "1m", label: "1分钟", count: 180, stepMinutes: 1, barSpacing: 5 },
+  { key: "5m", label: "5分钟", count: 160, stepMinutes: 5, barSpacing: 6 },
+  { key: "15m", label: "15分钟", count: 130, stepMinutes: 15, barSpacing: 7 },
+  { key: "30m", label: "30分钟", count: 110, stepMinutes: 30, barSpacing: 8 },
+  { key: "60m", label: "60分钟", count: 90, stepMinutes: 60, barSpacing: 9 },
+  { key: "day", label: "日K", count: 120, stepDays: 1, barSpacing: 8 },
+  { key: "week", label: "周K", count: 100, stepDays: 7, barSpacing: 8 },
+  { key: "month", label: "月K", count: 80, stepDays: 30, barSpacing: 9 },
+] as const;
+
+type PeriodKey = typeof periods[number]["key"];
 
 type Candle = {
   time: Time;
@@ -44,35 +60,67 @@ const marketTape = [
   ["北证50", "812.77", "+0.44%"],
 ];
 
-function makeCandles(score?: StockScore): Candle[] {
+function makeTime(index: number, period: (typeof periods)[number]): Time {
+  const start = new Date("2026-01-02T09:30:00+08:00");
+  if ("stepMinutes" in period) {
+    start.setMinutes(start.getMinutes() + index * period.stepMinutes);
+    return Math.floor(start.getTime() / 1000) as UTCTimestamp;
+  }
+  start.setDate(start.getDate() + index * period.stepDays);
+  return start.toISOString().slice(0, 10) as Time;
+}
+
+function makeCandles(score: StockScore | undefined, periodKey: PeriodKey): Candle[] {
+  const period = periods.find((item) => item.key === periodKey) ?? periods[6];
   const base = score?.close ?? 28;
-  const trend = score ? (score.total_score - 50) / 180 : 0.04;
-  const start = new Date("2026-01-02T00:00:00");
-  return Array.from({ length: 80 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    const wave = Math.sin(index / 2.8) * base * 0.018;
-    const drift = index * trend;
-    const open = base * (0.88 + index * 0.0018) + wave + drift;
-    const close = open + Math.cos(index / 2.2) * base * 0.024 + trend * 2.2;
-    const high = Math.max(open, close) + base * (0.012 + (index % 4) * 0.003);
-    const low = Math.min(open, close) - base * (0.011 + (index % 3) * 0.003);
+  const scoreTrend = score ? (score.total_score - 50) / 200 : 0.03;
+  const periodNoise = "stepMinutes" in period ? 0.009 : 0.022;
+  const periodTrend = "stepMinutes" in period ? scoreTrend * 0.35 : scoreTrend;
+
+  return Array.from({ length: period.count }, (_, index) => {
+    const wave = Math.sin(index / 3.2) * base * periodNoise;
+    const pulse = Math.cos(index / 8.5) * base * periodNoise * 0.7;
+    const drift = index * periodTrend;
+    const open = base * (0.9 + index * 0.0012) + wave + drift;
+    const close = open + Math.cos(index / 2.4) * base * periodNoise * 1.9 + pulse;
+    const high = Math.max(open, close) + base * (periodNoise * 0.55 + (index % 4) * periodNoise * 0.12);
+    const low = Math.min(open, close) - base * (periodNoise * 0.52 + (index % 3) * periodNoise * 0.12);
     return {
-      time: date.toISOString().slice(0, 10) as Time,
+      time: makeTime(index, period),
       open: Number(open.toFixed(2)),
       close: Number(close.toFixed(2)),
       high: Number(high.toFixed(2)),
       low: Number(low.toFixed(2)),
-      volume: Math.round(80 + Math.abs(close - open) * 20 + (index % 9) * 16),
+      volume: Math.round(60 + Math.abs(close - open) * 22 + (index % 9) * 15),
     };
   });
 }
 
-function InteractiveKLine({ score }: { score?: StockScore }) {
+function movingAverage(candles: Candle[], windowSize: number) {
+  return candles
+    .map((item, index) => {
+      if (index < windowSize - 1) return null;
+      const slice = candles.slice(index - windowSize + 1, index + 1);
+      const value = slice.reduce((sum, candle) => sum + candle.close, 0) / windowSize;
+      return { time: item.time, value: Number(value.toFixed(2)) };
+    })
+    .filter((item): item is { time: Time; value: number } => item !== null);
+}
+
+function InteractiveKLine({
+  score,
+  period,
+}: {
+  score?: StockScore;
+  period: PeriodKey;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const ma5Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const ma10Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const ma20Ref = useRef<ISeriesApi<"Line"> | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -101,7 +149,7 @@ function InteractiveKLine({ score }: { score?: StockScore }) {
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 5,
-        barSpacing: 9,
+        barSpacing: 8,
       },
       handleScroll: {
         mouseWheel: true,
@@ -127,36 +175,57 @@ function InteractiveKLine({ score }: { score?: StockScore }) {
       priceFormat: { type: "volume" },
       priceScaleId: "",
     });
-    volumeSeries.priceScale().applyOptions({
-      scaleMargins: { top: 0.78, bottom: 0 },
-    });
+    volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+    const ma5 = chart.addSeries(LineSeries, { color: "#ffd166", lineWidth: 1, priceLineVisible: false });
+    const ma10 = chart.addSeries(LineSeries, { color: "#4dabf7", lineWidth: 1, priceLineVisible: false });
+    const ma20 = chart.addSeries(LineSeries, { color: "#d783ff", lineWidth: 1, priceLineVisible: false });
+
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
+    ma5Ref.current = ma5;
+    ma10Ref.current = ma10;
+    ma20Ref.current = ma20;
 
     return () => {
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
+      ma5Ref.current = null;
+      ma10Ref.current = null;
+      ma20Ref.current = null;
     };
   }, []);
 
   useEffect(() => {
-    const candles = makeCandles(score);
+    const candles = makeCandles(score, period);
+    const periodConfig = periods.find((item) => item.key === period) ?? periods[6];
     candleSeriesRef.current?.setData(candles.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })));
     volumeSeriesRef.current?.setData(candles.map((item) => ({
       time: item.time,
       value: item.volume,
       color: item.close >= item.open ? "rgba(255, 77, 79, 0.5)" : "rgba(37, 194, 110, 0.45)",
     })));
+    ma5Ref.current?.setData(movingAverage(candles, 5));
+    ma10Ref.current?.setData(movingAverage(candles, 10));
+    ma20Ref.current?.setData(movingAverage(candles, 20));
+    chartRef.current?.timeScale().applyOptions({
+      barSpacing: periodConfig.barSpacing,
+      timeVisible: "stepMinutes" in periodConfig,
+    });
     chartRef.current?.timeScale().fitContent();
-  }, [score]);
+  }, [score, period]);
 
   return (
     <div className="kline-wrap">
+      <div className="ma-legend">
+        <span className="ma5">MA5</span>
+        <span className="ma10">MA10</span>
+        <span className="ma20">MA20</span>
+      </div>
       <div ref={containerRef} className="interactive-kline" />
-      <div className="kline-hint">拖动平移 · 滚轮缩放 · 十字光标查看价格</div>
+      <div className="kline-hint">拖动平移 · 滚轮缩放 · 十字光标查看高开低收</div>
     </div>
   );
 }
@@ -176,6 +245,7 @@ export default function App() {
   const [backtest, setBacktest] = useState<BacktestResult | null>(null);
   const [message, setMessage] = useState("连接行情终端，等待登录。");
   const [busy, setBusy] = useState(false);
+  const [period, setPeriod] = useState<PeriodKey>("day");
 
   async function runAction(action: () => Promise<void>, fallback: string) {
     setBusy(true);
@@ -226,7 +296,7 @@ export default function App() {
       const nextRun = await api.runScore(pool.id, strategy.current_version_id);
       setScoreRun(nextRun);
       setSelectedSymbol(nextRun.scores[0]?.symbol ?? "");
-      setMessage("短线评分完成，交互K线和排行榜已更新。");
+      setMessage("短线评分完成，K线周期和排行榜已更新。");
     }, "评分失败");
   }
 
@@ -249,7 +319,7 @@ export default function App() {
           <span className="brand-mark">短</span>
           <div>
             <h1>短线股票决策终端</h1>
-            <p>黑红行情盘 · 交互K线 · 量价评分 · 风险排雷</p>
+            <p>黑红行情盘 · 同花顺式K线周期 · 量价评分 · 风险排雷</p>
           </div>
         </div>
         <div className="market-tape">
@@ -313,10 +383,21 @@ export default function App() {
 
           <div className="main-chart panel">
             <div className="panel-title">
-              <h2><CandlestickChart size={18} /> 日K线</h2>
-              <div className="period-tabs"><span>日线</span><span>周线</span><span>月线</span><span>分钟</span></div>
+              <h2><CandlestickChart size={18} /> K线分析</h2>
+              <div className="period-tabs">
+                {periods.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={period === item.key ? "active-period" : ""}
+                    onClick={() => setPeriod(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <InteractiveKLine score={selectedScore} />
+            <InteractiveKLine score={selectedScore} period={period} />
           </div>
 
           <div className="bottom-grid">

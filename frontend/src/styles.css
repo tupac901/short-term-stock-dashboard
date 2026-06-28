@@ -253,18 +253,24 @@ h2 {
 
 .period-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+  justify-content: flex-end;
 }
 
-.period-tabs span {
+.period-tabs button {
   background: #151a21;
   border: 1px solid #303844;
+  border-radius: 2px;
   color: #aeb7c4;
+  cursor: pointer;
   font-size: 12px;
+  min-height: 26px;
   padding: 4px 8px;
 }
 
-.period-tabs span:first-child {
+.period-tabs button:hover,
+.period-tabs .active-period {
   background: #5b1113;
   border-color: #b83232;
   color: #fff;
@@ -285,6 +291,25 @@ h2 {
   height: 350px;
   min-height: 350px;
   width: 100%;
+}
+
+.ma-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  padding: 0 2px;
+}
+
+.ma5 {
+  color: #ffd166;
+}
+
+.ma10 {
+  color: #4dabf7;
+}
+
+.ma20 {
+  color: #d783ff;
 }
 
 .kline-hint {
