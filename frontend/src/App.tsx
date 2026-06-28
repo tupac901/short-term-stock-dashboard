@@ -62,16 +62,20 @@ const marketTape = [
 ];
 
 function makeTime(index: number, period: (typeof periods)[number]): Time {
-  const start = new Date("2026-01-02T09:30:00+08:00");
+  const now = new Date();
   if ("stepMinutes" in period) {
-    start.setMinutes(start.getMinutes() + index * period.stepMinutes);
-    return Math.floor(start.getTime() / 1000) as UTCTimestamp;
+    const end = new Date(now);
+    end.setSeconds(0, 0);
+    end.setMinutes(end.getMinutes() - (period.count - 1 - index) * period.stepMinutes);
+    return Math.floor(end.getTime() / 1000) as UTCTimestamp;
   }
-  start.setDate(start.getDate() + index * period.stepDays);
-  return start.toISOString().slice(0, 10) as Time;
+  const end = new Date(now);
+  end.setHours(0, 0, 0, 0);
+  end.setDate(end.getDate() - (period.count - 1 - index) * period.stepDays);
+  return end.toISOString().slice(0, 10) as Time;
 }
 
-function makeCandles(score: StockScore | undefined, periodKey: PeriodKey): Candle[] {
+export function makeCandles(score: StockScore | undefined, periodKey: PeriodKey): Candle[] {
   const period = periods.find((item) => item.key === periodKey) ?? periods[6];
   const base = score?.close ?? 28;
   const scoreTrend = score ? (score.total_score - 50) / 200 : 0.03;
