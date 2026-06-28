@@ -1,0 +1,1 @@
+"""Stock analysis dashboard backend."""

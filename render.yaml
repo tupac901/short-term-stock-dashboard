@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: short-term-stock-dashboard
+    env: docker
+    plan: free
+    autoDeploy: false
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:///./stock_dashboard.db
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "1440"
+      - key: CORS_ORIGINS
+        value: ""
