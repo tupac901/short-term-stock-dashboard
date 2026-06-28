@@ -298,6 +298,7 @@ h2 {
   gap: 14px;
   font-size: 12px;
   padding: 0 2px;
+  flex-wrap: wrap;
 }
 
 .ma5 {
@@ -310,6 +311,11 @@ h2 {
 
 .ma20 {
   color: #d783ff;
+}
+
+.hover-info {
+  color: #e8edf5;
+  margin-left: auto;
 }
 
 .kline-hint {

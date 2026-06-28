@@ -21,6 +21,7 @@ import {
   createChart,
   type IChartApi,
   type ISeriesApi,
+  type MouseEventParams,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
@@ -114,6 +115,7 @@ function InteractiveKLine({
   score?: StockScore;
   period: PeriodKey;
 }) {
+  const [hoverInfo, setHoverInfo] = useState<string>("移动鼠标查看K线价格");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -187,7 +189,23 @@ function InteractiveKLine({
     ma10Ref.current = ma10;
     ma20Ref.current = ma20;
 
+    const handleCrosshairMove = (param: MouseEventParams<Time>) => {
+      const seriesData = param.seriesData.get(candleSeries) as
+        | { open: number; high: number; low: number; close: number }
+        | undefined;
+      if (!seriesData) {
+        setHoverInfo("移动鼠标查看K线价格");
+        return;
+      }
+      const pct = ((seriesData.close - seriesData.open) / seriesData.open) * 100;
+      setHoverInfo(
+        `开 ${seriesData.open.toFixed(2)}  高 ${seriesData.high.toFixed(2)}  低 ${seriesData.low.toFixed(2)}  收 ${seriesData.close.toFixed(2)}  涨跌 ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`,
+      );
+    };
+    chart.subscribeCrosshairMove(handleCrosshairMove);
+
     return () => {
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -223,6 +241,7 @@ function InteractiveKLine({
         <span className="ma5">MA5</span>
         <span className="ma10">MA10</span>
         <span className="ma20">MA20</span>
+        <span className="hover-info">{hoverInfo}</span>
       </div>
       <div ref={containerRef} className="interactive-kline" />
       <div className="kline-hint">拖动平移 · 滚轮缩放 · 十字光标查看高开低收</div>
