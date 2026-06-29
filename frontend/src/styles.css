@@ -196,6 +196,15 @@ h2 {
   padding: 9px;
 }
 
+.watch-status {
+  background: #10151b;
+  border: 1px solid #303844;
+  color: #ffb3b3;
+  font-size: 12px;
+  margin: 0;
+  padding: 7px 9px;
+}
+
 .quote-board {
   display: grid;
   gap: 10px;

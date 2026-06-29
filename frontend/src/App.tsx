@@ -31,6 +31,11 @@ import type { BacktestResult, ScoreRun, StockPool, StockScore, Strategy, Strateg
 
 const defaultSymbols = "600519,000001,300750,002594,601318";
 
+export function parseTonghuashunSymbols(input: string): string[] {
+  const matches = input.toUpperCase().match(/\d{6}/g) ?? [];
+  return Array.from(new Set(matches));
+}
+
 const periods = [
   { key: "timeline", label: "分时", count: 120, stepMinutes: 1, barSpacing: 6 },
   { key: "1m", label: "1分钟", count: 180, stepMinutes: 1, barSpacing: 5 },
@@ -261,6 +266,7 @@ export default function App() {
   const [templates, setTemplates] = useState<StrategyTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState("strong_breakout");
   const [symbols, setSymbols] = useState(defaultSymbols);
+  const [thsImportText, setThsImportText] = useState("");
   const [pool, setPool] = useState<StockPool | null>(null);
   const [strategy, setStrategy] = useState<Strategy | null>(null);
   const [scoreRun, setScoreRun] = useState<ScoreRun | null>(null);
@@ -269,6 +275,8 @@ export default function App() {
   const [message, setMessage] = useState("连接行情终端，等待登录。");
   const [busy, setBusy] = useState(false);
   const [period, setPeriod] = useState<PeriodKey>("day");
+  const [watchEnabled, setWatchEnabled] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState("");
 
   async function runAction(action: () => Promise<void>, fallback: string) {
     setBusy(true);
@@ -313,12 +321,24 @@ export default function App() {
     }, "创建研究配置失败");
   }
 
+  function importTonghuashunSymbols() {
+    const imported = parseTonghuashunSymbols(thsImportText);
+    if (imported.length === 0) {
+      setMessage("没有识别到同花顺自选股代码，请粘贴包含 6 位代码的文本。");
+      return;
+    }
+    const merged = Array.from(new Set([...parseTonghuashunSymbols(symbols), ...imported]));
+    setSymbols(merged.join(","));
+    setMessage(`已从同花顺自选文本识别 ${imported.length} 只，当前股票池 ${merged.length} 只。`);
+  }
+
   async function runScore() {
     if (!pool || !strategy) return;
     await runAction(async () => {
       const nextRun = await api.runScore(pool.id, strategy.current_version_id);
       setScoreRun(nextRun);
       setSelectedSymbol(nextRun.scores[0]?.symbol ?? "");
+      setLastRefresh(new Date().toLocaleTimeString());
       setMessage("短线评分完成，K线周期和排行榜已更新。");
     }, "评分失败");
   }
@@ -330,6 +350,14 @@ export default function App() {
       setMessage("日线回测完成。");
     }, "回测失败");
   }
+
+  useEffect(() => {
+    if (!watchEnabled || !pool || !strategy || busy) return;
+    const interval = window.setInterval(() => {
+      runScore();
+    }, 15000);
+    return () => window.clearInterval(interval);
+  }, [watchEnabled, pool, strategy, busy]);
 
   const topScores = scoreRun?.scores ?? [];
   const selectedScore = topScores.find((item) => item.symbol === selectedSymbol) ?? topScores[0];
@@ -365,7 +393,23 @@ export default function App() {
           <button onClick={login} disabled={busy}><Lock size={16} /> 登录 / 首次自动注册</button>
 
           <h2><Target size={16} /> 股票池</h2>
+          <label>同花顺手机自选粘贴区
+            <textarea
+              value={thsImportText}
+              placeholder="从手机同花顺分享/复制自选股后粘贴到这里，例如：贵州茅台 600519、平安银行 000001"
+              onChange={(event) => setThsImportText(event.target.value)}
+            />
+          </label>
+          <button type="button" onClick={importTonghuashunSymbols}><Target size={16} /> 识别并加入股票池</button>
           <textarea value={symbols} onChange={(event) => setSymbols(event.target.value)} />
+          <button
+            type="button"
+            disabled={!pool || !strategy}
+            onClick={() => setWatchEnabled((enabled) => !enabled)}
+          >
+            <Activity size={16} /> {watchEnabled ? "停止实时盯盘" : "开启实时盯盘"}
+          </button>
+          {lastRefresh && <p className="watch-status">最后刷新：{lastRefresh} · 每 15 秒自动刷新</p>}
           <label>策略模板
             <select value={selectedTemplate} onChange={(event) => setSelectedTemplate(event.target.value)}>
               {templates.map((template) => <option key={template.key} value={template.key}>{template.name}</option>)}

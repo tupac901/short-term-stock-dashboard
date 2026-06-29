@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import App, { makeCandles } from "./App";
+import App, { makeCandles, parseTonghuashunSymbols } from "./App";
 
 describe("App", () => {
   it("renders the short-term stock dashboard shell", () => {
@@ -17,5 +17,13 @@ describe("App", () => {
     const last = String(candles[candles.length - 1].time);
     const today = new Date().toISOString().slice(0, 10);
     expect(last <= today).toBe(true);
+  });
+
+  it("parses pasted Tonghuashun mobile watchlist text", () => {
+    expect(parseTonghuashunSymbols("贵州茅台 600519\nSZ000001, 300750.SZ, 600519")).toEqual([
+      "600519",
+      "000001",
+      "300750",
+    ]);
   });
 });
