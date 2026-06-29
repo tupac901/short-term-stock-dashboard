@@ -350,11 +350,22 @@ export default function App() {
         password: thsPassword || undefined,
         cookies: thsCookies.trim() || undefined,
       });
+      const nextTemplates = templates.length > 0 ? templates : await api.templates();
+      if (templates.length === 0) setTemplates(nextTemplates);
+      const template = nextTemplates.find((item) => item.key === selectedTemplate) ?? nextTemplates[0];
+      if (!template) {
+        setMessage("同花顺自选股已同步，但策略模板加载失败，暂时无法运行盯盘评分。");
+        return;
+      }
+      const nextStrategy = strategy ?? await api.createStrategy(template.name, template.key, template.weights);
+      const nextRun = await api.runScore(result.stock_pool.id, nextStrategy.current_version_id);
       setPool(result.stock_pool);
+      setStrategy(nextStrategy);
       setSymbols(result.symbols.join(","));
-      setScoreRun(null);
-      setSelectedSymbol("");
-      setMessage(`已直接同步同花顺 APP 自选股 ${result.count} 只，股票池已更新。`);
+      setScoreRun(nextRun);
+      setSelectedSymbol(nextRun.scores[0]?.symbol ?? "");
+      setLastRefresh(new Date().toLocaleTimeString());
+      setMessage(`已直接同步同花顺 APP 自选股 ${result.count} 只，并已完成首次盯盘评分。`);
     }, "同花顺 APP 自选股同步失败");
   }
 
