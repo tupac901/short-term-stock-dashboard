@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.core.config import get_settings
 from app.db import init_db
-from app.routers import alerts, auth, backtests, scoring, stock_pools, strategies, teams
+from app.routers import alerts, auth, backtests, scoring, stock_pools, strategies, teams, tonghuashun
 
 
 def create_app() -> FastAPI:
@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
     app.include_router(scoring.router)
     app.include_router(alerts.router)
     app.include_router(backtests.router)
+    app.include_router(tonghuashun.router)
 
     @app.get("/api/health")
     def health():

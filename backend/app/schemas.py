@@ -54,6 +54,20 @@ class StockPoolRead(BaseModel):
     symbols: list[str]
 
 
+class TonghuashunSyncRequest(BaseModel):
+    username: str | None = None
+    password: str | None = None
+    cookies: str | None = None
+    pool_name: str = "同花顺APP自选同步"
+
+
+class TonghuashunSyncResponse(BaseModel):
+    stock_pool: StockPoolRead
+    symbols: list[str]
+    count: int
+    source: str = "tonghuashun"
+
+
 class StrategyWeights(BaseModel):
     technical: float = 45
     capital: float = 35

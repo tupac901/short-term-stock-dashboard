@@ -10,6 +10,7 @@ dependencies = [
     "pydantic-settings>=2.5.0",
     "email-validator>=2.2.0",
     "python-multipart>=0.0.9",
+    "ths-favorite @ git+https://github.com/sunnysab/ths-favorite.git",
 ]
 
 [project.optional-dependencies]

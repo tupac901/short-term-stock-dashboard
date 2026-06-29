@@ -1,4 +1,12 @@
-import type { BacktestResult, ScoreRun, StockPool, Strategy, StrategyTemplate, StrategyWeights } from "../types";
+import type {
+  BacktestResult,
+  ScoreRun,
+  StockPool,
+  Strategy,
+  StrategyTemplate,
+  StrategyWeights,
+  TonghuashunSyncResponse,
+} from "../types";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -36,6 +44,13 @@ export class ApiClient {
     return this.request<StockPool>("/api/stock-pools", {
       method: "POST",
       body: JSON.stringify({ name, scope: "personal", symbols })
+    });
+  }
+
+  syncTonghuashunWatchlist(payload: { username?: string; password?: string; cookies?: string }) {
+    return this.request<TonghuashunSyncResponse>("/api/integrations/tonghuashun/sync", {
+      method: "POST",
+      body: JSON.stringify({ ...payload, pool_name: "同花顺APP自选同步" })
     });
   }
 

@@ -267,6 +267,9 @@ export default function App() {
   const [selectedTemplate, setSelectedTemplate] = useState("strong_breakout");
   const [symbols, setSymbols] = useState(defaultSymbols);
   const [thsImportText, setThsImportText] = useState("");
+  const [thsUsername, setThsUsername] = useState("");
+  const [thsPassword, setThsPassword] = useState("");
+  const [thsCookies, setThsCookies] = useState("");
   const [pool, setPool] = useState<StockPool | null>(null);
   const [strategy, setStrategy] = useState<Strategy | null>(null);
   const [scoreRun, setScoreRun] = useState<ScoreRun | null>(null);
@@ -330,6 +333,29 @@ export default function App() {
     const merged = Array.from(new Set([...parseTonghuashunSymbols(symbols), ...imported]));
     setSymbols(merged.join(","));
     setMessage(`已从同花顺自选文本识别 ${imported.length} 只，当前股票池 ${merged.length} 只。`);
+  }
+
+  async function syncTonghuashunApp() {
+    await runAction(async () => {
+      if (!loggedIn) {
+        setMessage("请先登录本系统账户，再同步同花顺 APP 自选股。");
+        return;
+      }
+      if (!thsCookies.trim() && (!thsUsername.trim() || !thsPassword.trim())) {
+        setMessage("请输入同花顺账号密码，或粘贴同花顺 Cookie 后再同步。");
+        return;
+      }
+      const result = await api.syncTonghuashunWatchlist({
+        username: thsUsername.trim() || undefined,
+        password: thsPassword || undefined,
+        cookies: thsCookies.trim() || undefined,
+      });
+      setPool(result.stock_pool);
+      setSymbols(result.symbols.join(","));
+      setScoreRun(null);
+      setSelectedSymbol("");
+      setMessage(`已直接同步同花顺 APP 自选股 ${result.count} 只，股票池已更新。`);
+    }, "同花顺 APP 自选股同步失败");
   }
 
   async function runScore() {
@@ -401,6 +427,31 @@ export default function App() {
             />
           </label>
           <button type="button" onClick={importTonghuashunSymbols}><Target size={16} /> 识别并加入股票池</button>
+          <label>同花顺账号
+            <input
+              value={thsUsername}
+              placeholder="手机号 / 同花顺账号"
+              onChange={(event) => setThsUsername(event.target.value)}
+            />
+          </label>
+          <label>同花顺密码
+            <input
+              type="password"
+              value={thsPassword}
+              placeholder="仅用于本次同步，不保存"
+              onChange={(event) => setThsPassword(event.target.value)}
+            />
+          </label>
+          <label>同花顺 Cookie
+            <textarea
+              value={thsCookies}
+              placeholder="可选：如果账号密码同步失败，粘贴浏览器里的同花顺 Cookie"
+              onChange={(event) => setThsCookies(event.target.value)}
+            />
+          </label>
+          <button type="button" disabled={!loggedIn || busy} onClick={syncTonghuashunApp}>
+            <Activity size={16} /> 直接同步同花顺APP自选
+          </button>
           <textarea value={symbols} onChange={(event) => setSymbols(event.target.value)} />
           <button
             type="button"

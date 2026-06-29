@@ -20,6 +20,13 @@ export type StockPool = {
   symbols: string[];
 };
 
+export type TonghuashunSyncResponse = {
+  stock_pool: StockPool;
+  symbols: string[];
+  count: number;
+  source: string;
+};
+
 export type Strategy = {
   id: number;
   name: string;
